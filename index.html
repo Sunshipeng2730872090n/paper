@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>无限画布应用</title>
+    <style>
+        /* 合并所有CSS样式 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .app-container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* 画布区域样式 */
+        #canvas-container {
+            width: 80%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #infinite-canvas {
+            position: absolute;
+            width: 1000000px;
+            height: 1000000px;
+            transform-origin: 0 0;
+            background-color: #f5f5f5;
+            /* 初始位置设置在中心 */
+            transform: translate(-500000px, -500000px) scale(1);
+        }
+
+        /* 侧边栏样式 */
+        #sidebar {
+            width: 20%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #ddd;
+            background-color: #fff;
+        }
+
+        /* 搜索区域样式 */
+        #search-area {
+            height: 100%;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .search-container {
+            display: flex;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+
+        #search-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #search-results {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #570d0d;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        .search-result-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .search-result-item:hover {
+            background-color: #f9f9f9;
+        }
+
+        .search-result-item.highlighted {
+            background-color: #e6f7ff;
+        }
+
+        /* 卡片样式 */
+        .card {
+            position: absolute;
+            min-width: 160px;
+            min-height: 100px;
+            background-color: white;
+            border: 1px solid #570d0d;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 3px;
+            background-color: #f0f0f0;
+            cursor: move;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            display: none;
+        }
+
+        .card-delete {
+            padding-left: 5px;
+            cursor: pointer;
+            color: #ff4d4f;
+            font-weight: bold;
+        }
+
+        .card-content {
+            padding: 10px;
+            flex: 1;
+            overflow: auto;
+        }
+
+        .card-resize {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            right: 0;
+            bottom: 0;
+            cursor: nwse-resize;
+        }
+
+        .card-resize::before {
+            content: "";
+            position: absolute;
+            right: 3px;
+            bottom: 3px;
+            width: 9px;
+            height: 9px;
+            border-right: 2px solid #999;
+            border-bottom: 2px solid #999;
+        }
+
+        .no-results {
+            padding: 10px;
+            color: #999;
+            text-align: center;
+        }
+
+        .highlighted {
+            box-shadow: 0 0 0 2px #1890ff;
+        }
+
+        /* 状态栏样式 */
+        #status-bar {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #status-bar.visible {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 画布区域 (80% 宽度) -->
+        <div id="canvas-container">
+            <div id="infinite-canvas"></div>
+        </div>
+        
+        <!-- 侧边控制区 (20% 宽度) -->
+        <div id="sidebar">
+            <!-- 搜索区域 -->
+            <div id="search-area">
+                <div class="search-container">
+                    <input type="text" id="search-input" placeholder="搜索卡片内容...">
+                </div>
+                <div id="search-results">
+                    <!-- 搜索结果将在这里动态生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 状态栏 -->
+    <div id="status-bar"></div>
+
+    <script>
+        // 卡片类
+        class Card {
+            constructor(x, y, id = null, width = 160, height = 100, content = '') {
+                this.id = id || 'card_' + Date.now();
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.isDragging = false;
+                this.isResizing = false;
+                this.dragOffset = { x: 0, y: 0 };
+                this.content = content;
+                
+                this.createElement();
+                this.initEventListeners();
+            }
+            
+            // 创建卡片元素
+            createElement() {
+                this.element = document.createElement('div');
+                this.element.className = 'card';
+                this.element.id = this.id;
+                this.element.style.left = `${this.x}px`;
+                this.element.style.top = `${this.y}px`;
+                this.element.style.width = `${this.width}px`;
+                this.element.style.height = `${this.height}px`;
+                
+                // 创建卡片头部
+                const header = document.createElement('div');
+                header.className = 'card-header';
+                
+                const title = document.createElement('div');
+                title.className = 'card-title';
+                title.textContent = '';
+                
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'card-delete';
+                deleteBtn.textContent = '×';
+                
+                header.appendChild(title);
+                header.appendChild(deleteBtn);
+                
+                // 创建卡片内容区
+                const content = document.createElement('div');
+                content.className = 'card-content';
+                content.contentEditable = true;
+                content.dataset.placeholder = '在这里输入内容...';
+                content.innerHTML = this.content;
+                
+                // 创建调整大小的控制点
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'card-resize';
+                
+                this.element.appendChild(header);
+                this.element.appendChild(content);
+                this.element.appendChild(resizeHandle);
+                
+                // 保存内容元素的引用
+                this.contentElement = content;
+            }
+            
+            // 初始化事件监听器
+            initEventListeners() {
+                const header = this.element.querySelector('.card-header');
+                const resizeHandle = this.element.querySelector('.card-resize');
+                const deleteBtn = this.element.querySelector('.card-delete');
+                const content = this.element.querySelector('.card-content');
+                
+                // 拖拽卡片
+                header.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    this.isDragging = true;
+                    
+                    const rect = this.element.getBoundingClientRect();
+                    this.dragOffset = {
+                        x: e.clientX - rect.left,
+                        y: e.clientY - rect.top
+                    };
+                    
+                    // 将当前卡片置于顶层
+                    this.element.style.zIndex = 1000;
+                });
+                
+                // 调整卡片大小
+                resizeHandle.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    this.isResizing = true;
+                    
+                    // 记录初始大小和鼠标位置
+                    this.initialSize = {
+                        width: this.width,
+                        height: this.height
+                    };
+                    this.initialMouse = {
+                        x: e.clientX,
+                        y: e.clientY
+                    };
+                });
+                
+                // 删除卡片
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    if (confirm('确定要删除这个卡片吗？')) {
+                        // 获取画布实例并删除卡片
+                        const canvas = window.infiniteCanvas;
+                        canvas.removeCard(this.id);
+                    }
+                });
+                
+                // 内容更改事件
+                content.addEventListener('input', () => {
+                    this.content = content.innerHTML;
+                    saveData(); // 保存数据
+                });
+                
+                // 鼠标移动事件 - 处理拖拽和调整大小
+                document.addEventListener('mousemove', (e) => {
+                    if (this.isDragging) {
+                        const canvas = document.getElementById('infinite-canvas');
+                        const scale = window.infiniteCanvas.scale;
+                        
+                        // 计算新位置
+                        const canvasRect = canvas.getBoundingClientRect();
+                        const x = (e.clientX - canvasRect.left) / scale - this.dragOffset.x / scale;
+                        const y = (e.clientY - canvasRect.top) / scale - this.dragOffset.y / scale;
+                        
+                        this.x = x;
+                        this.y = y;
+                        
+                        this.element.style.left = `${x}px`;
+                        this.element.style.top = `${y}px`;
+                        
+                        saveData(); // 保存数据
+                    }
+                    
+                    if (this.isResizing) {
+                        // 计算大小变化
+                        const deltaX = e.clientX - this.initialMouse.x;
+                        const deltaY = e.clientY - this.initialMouse.y;
+                        
+                        // 应用缩放比例
+                        const scale = window.infiniteCanvas.scale;
+                        const scaledDeltaX = deltaX / scale;
+                        const scaledDeltaY = deltaY / scale;
+                        
+                        // 计算新大小
+                        this.width = Math.max(160, this.initialSize.width + scaledDeltaX);
+                        this.height = Math.max(100, this.initialSize.height + scaledDeltaY);
+                        
+                        this.element.style.width = `${this.width}px`;
+                        this.element.style.height = `${this.height}px`;
+                        
+                        saveData(); // 保存数据
+                    }
+                });
+                
+                // 鼠标释放事件 - 结束拖拽和调整大小
+                document.addEventListener('mouseup', () => {
+                    if (this.isDragging) {
+                        this.isDragging = false;
+                        // 恢复正常层级
+                        setTimeout(() => {
+                            this.element.style.zIndex = '';
+                        }, 0);
+                    }
+                    
+                    if (this.isResizing) {
+                        this.isResizing = false;
+                    }
+                });
+            }
+            
+            // 高亮显示卡片
+            highlight() {
+                this.element.classList.add('highlighted');
+                setTimeout(() => {
+                    this.element.classList.remove('highlighted');
+                }, 2000);
+            }
+            
+            // 获取卡片内容
+            getContent() {
+                return this.content;
+            }
+            
+            // 获取卡片数据
+            getData() {
+                return {
+                    id: this.id,
+                    x: this.x,
+                    y: this.y,
+                    width: this.width,
+                    height: this.height,
+                    content: this.content
+                };
+            }
+        }
+
+        // 画布控制类
+        class InfiniteCanvas {
+            constructor() {
+                this.canvas = document.getElementById('infinite-canvas');
+                this.container = document.getElementById('canvas-container');
+                this.position = { x: -500000, y: -500000 }; // 初始位置（画布中心）
+                this.scale = 1; // 初始缩放比例
+                this.isDragging = false;
+                this.lastPosition = { x: 0, y: 0 };
+                this.cards = [];
+                
+                this.initEventListeners();
+            }
+            
+            // 初始化事件监听器
+            initEventListeners() {
+                // 鼠标按下事件 - 开始拖拽
+                this.canvas.addEventListener('mousedown', (e) => {
+                    // 如果点击的是卡片，不处理画布拖拽
+                    if (e.target.closest('.card')) return;
+                    
+                    this.isDragging = true;
+                    this.lastPosition = { x: e.clientX, y: e.clientY };
+                    this.canvas.style.cursor = 'grabbing';
+                });
+                
+                // 鼠标移动事件 - 拖拽画布
+                document.addEventListener('mousemove', (e) => {
+                    if (!this.isDragging) return;
+                    
+                    const deltaX = e.clientX - this.lastPosition.x;
+                    const deltaY = e.clientY - this.lastPosition.y;
+                    
+                    this.position.x += deltaX / this.scale;
+                    this.position.y += deltaY / this.scale;
+                    
+                    this.updateCanvasTransform();
+                    
+                    this.lastPosition = { x: e.clientX, y: e.clientY };
+                    
+                    saveData(); // 保存画布位置和缩放
+                });
+                
+                // 鼠标释放事件 - 结束拖拽
+                document.addEventListener('mouseup', () => {
+                    this.isDragging = false;
+                    this.canvas.style.cursor = 'default';
+                });
+                
+                // 鼠标离开事件 - 结束拖拽
+                document.addEventListener('mouseleave', () => {
+                    this.isDragging = false;
+                    this.canvas.style.cursor = 'default';
+                });
+                
+                // 滚轮事件 - 控制画布滚动和缩放
+                this.container.addEventListener('wheel', (e) => {
+                    e.preventDefault(); // 阻止默认滚动行为
+                    
+                    // Ctrl + 滚轮：缩放画布 (交换了Ctrl和Shift)
+                    if (e.ctrlKey) {
+                        const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1; // 缩小或放大
+                        const mouseX = e.clientX - this.container.getBoundingClientRect().left;
+                        const mouseY = e.clientY - this.container.getBoundingClientRect().top;
+                        
+                        // 计算鼠标在画布上的位置
+                        const canvasX = (mouseX / this.scale) - this.position.x;
+                        const canvasY = (mouseY / this.scale) - this.position.y;
+                        
+                        // 更新缩放比例
+                        this.scale *= scaleFactor;
+                        
+                        // 限制缩放范围
+                        this.scale = Math.max(0.1, Math.min(5, this.scale));
+                        
+                        // 调整位置，使鼠标指向的点保持不变
+                        this.position.x = -(canvasX - mouseX / this.scale);
+                        this.position.y = -(canvasY - mouseY / this.scale);
+                        
+                        this.updateCanvasTransform();
+                        saveData(); // 保存画布位置和缩放
+                    }
+                    // Shift + 滚轮：水平滚动 (交换了Ctrl和Shift)
+                    else if (e.shiftKey) {
+                        this.position.x += e.deltaY / this.scale;
+                        this.updateCanvasTransform();
+                        saveData(); // 保存画布位置和缩放
+                    }
+                    // 普通滚轮：垂直滚动
+                    else {
+                        this.position.y += e.deltaY / this.scale;
+                        this.updateCanvasTransform();
+                        saveData(); // 保存画布位置和缩放
+                    }
+                }, { passive: false });
+                
+                // 双击事件 - 创建新卡片
+                this.canvas.addEventListener('dblclick', (e) => {
+                    // 如果双击的是卡片，不创建新卡片
+                    if (e.target.closest('.card')) return;
+                    
+                    const rect = this.container.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) / this.scale - this.position.x;
+                    const y = (e.clientY - rect.top) / this.scale - this.position.y;
+                    
+                    this.createCard(x, y);
+                });
+            }
+            
+            // 更新画布变换
+            updateCanvasTransform() {
+                this.canvas.style.transform = `translate(${this.position.x * this.scale}px, ${this.position.y * this.scale}px) scale(${this.scale})`;
+            }
+            
+            // 创建新卡片
+            createCard(x, y, cardData = null) {
+                let card;
+                
+                if (cardData) {
+                    card = new Card(
+                        cardData.x,
+                        cardData.y,
+                        cardData.id,
+                        cardData.width,
+                        cardData.height,
+                        cardData.content
+                    );
+                } else {
+                    card = new Card(x, y);
+                }
+                
+                this.cards.push(card);
+                this.canvas.appendChild(card.element);
+                
+                // 更新侧边栏
+                if (window.sidebar) {
+                    window.sidebar.showAllCards();
+                }
+                
+                saveData(); // 保存数据
+                return card;
+            }
+            
+            // 删除卡片
+            removeCard(cardId) {
+                const index = this.cards.findIndex(card => card.id === cardId);
+                if (index !== -1) {
+                    this.cards[index].element.remove();
+                    this.cards.splice(index, 1);
+                    
+                    // 更新侧边栏
+                    if (window.sidebar) {
+                        window.sidebar.showAllCards();
+                    }
+                    
+                    saveData(); // 保存数据
+                }
+            }
+            
+            // 获取画布数据
+            getData() {
+                return {
+                    position: this.position,
+                    scale: this.scale,
+                    cards: this.cards.map(card => card.getData())
+                };
+            }
+            
+            // 从数据加载画布
+            loadFromData(data) {
+                if (!data) return;
+                
+                // 加载画布位置和缩放
+                if (data.position) this.position = data.position;
+                if (data.scale) this.scale = data.scale;
+                
+                this.updateCanvasTransform();
+                
+                // 加载卡片
+                if (data.cards && Array.isArray(data.cards)) {
+                    data.cards.forEach(cardData => {
+                        this.createCard(0, 0, cardData);
+                    });
+                }
+            }
+        }
+
+        // 侧边栏控制类
+        class Sidebar {
+            constructor() {
+                this.searchInput = document.getElementById('search-input');
+                this.searchResults = document.getElementById('search-results');
+                
+                this.initEventListeners();
+                
+                // 初始化时显示所有卡片
+                setTimeout(() => {
+                    this.showAllCards();
+                }, 100);
+            }
+            
+            // 初始化事件监听器
+            initEventListeners() {
+                // 搜索输入事件
+                this.searchInput.addEventListener('input', () => {
+                    const query = this.searchInput.value.trim().toLowerCase();
+                    if (query) {
+                        this.performSearch(query);
+                    } else {
+                        this.showAllCards();
+                    }
+                });
+                
+                // Tab键清除搜索内容
+                this.searchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Tab') {
+                        e.preventDefault(); // 阻止默认的Tab键行为
+                        this.searchInput.value = '';
+                        this.showAllCards();
+                    }
+                });
+            }
+            
+            // 显示所有卡片
+            showAllCards() {
+                this.searchResults.innerHTML = '';
+                
+                const canvas = window.infiniteCanvas;
+                if (!canvas || !canvas.cards || canvas.cards.length === 0) {
+                    const noCards = document.createElement('div');
+                    noCards.className = 'no-results';
+                    noCards.textContent = '暂无卡片';
+                    this.searchResults.appendChild(noCards);
+                    return;
+                }
+                
+                // 显示所有卡片
+                canvas.cards.forEach(card => {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'search-result-item';
+                    
+                    // 获取卡片内容的前3行
+                    const content = card.getContent();
+                    // const textContent = this.stripHtml(content);
+                    // const lines = textContent.split('\n').slice(0, 3).join('\n');
+                    const lines = content.split(/(?:<\/?div>)+/).filter(Boolean).slice(0, 1).join('\n');
+                    resultItem.textContent = lines || '空白卡片';
+                    
+                    // 点击结果跳转到对应卡片
+                    resultItem.addEventListener('click', () => {
+                        // 计算卡片中心位置，考虑当前缩放比例
+                        const scale = window.infiniteCanvas.scale;
+                        const centerX = -(card.x + card.width / 2 - window.innerWidth * 0.4);
+                        const centerY = -(card.y + card.height / 2 - window.innerHeight / 2);
+                        
+                        // 平滑滚动到卡片位置
+                        this.scrollToCard(centerX, centerY);
+                        
+                        // 高亮显示卡片
+                        card.highlight();
+                    });
+                    
+                    this.searchResults.appendChild(resultItem);
+                });
+            }
+            
+            // 执行搜索
+            performSearch(query) {
+                this.searchResults.innerHTML = '';
+                
+                const canvas = window.infiniteCanvas;
+                const matchingCards = canvas.cards.filter(card => {
+                    const content = card.getContent().toLowerCase();
+                    return content.includes(query);
+                });
+                
+                if (matchingCards.length === 0) {
+                    const noResults = document.createElement('div');
+                    noResults.className = 'no-results';
+                    noResults.textContent = '没有找到匹配的卡片';
+                    this.searchResults.appendChild(noResults);
+                    return;
+                }
+                
+                // 显示搜索结果
+                matchingCards.forEach(card => {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'search-result-item';
+                    
+                    // 获取卡片内容的前3行
+                    const content = card.getContent();
+                    // const textContent = this.stripHtml(content);
+                    // const lines = textContent.split('\n').slice(0, 3).join('\n');
+                    const lines = content.split(/(?:<\/?div>)+/).filter(Boolean).slice(0, 1).join('\n');
+                    
+                    resultItem.textContent = lines || '空白卡片';
+                    
+                    // 点击结果跳转到对应卡片
+                    resultItem.addEventListener('click', () => {
+                        // 计算卡片中心位置，考虑当前缩放比例
+                        const scale = window.infiniteCanvas.scale;
+                        const centerX = -(card.x + card.width / 2 - window.innerWidth * 0.4);
+                        const centerY = -(card.y + card.height / 2 - window.innerHeight / 2);
+                        
+                        // 平滑滚动到卡片位置
+                        this.scrollToCard(centerX, centerY);
+                        
+                        // 高亮显示卡片
+                        card.highlight();
+                    });
+                    
+                    this.searchResults.appendChild(resultItem);
+                });
+            }
+            
+            // 平滑滚动到卡片位置
+            scrollToCard(targetX, targetY) {
+                const canvas = window.infiniteCanvas;
+                const startX = canvas.position.x;
+                const startY = canvas.position.y;
+                const deltaX = targetX - startX;
+                const deltaY = targetY - startY;
+                
+                const duration = 500; // 动画持续时间（毫秒）
+                const startTime = performance.now();
+                
+                function animate(currentTime) {
+                    const elapsedTime = currentTime - startTime;
+                    const progress = Math.min(elapsedTime / duration, 1);
+                    
+                    // 使用缓动函数使动画更平滑
+                    const easeProgress = easeInOutCubic(progress);
+                    
+                    canvas.position.x = startX + deltaX * easeProgress;
+                    canvas.position.y = startY + deltaY * easeProgress;
+                    
+                    canvas.updateCanvasTransform();
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    }
+                }
+                
+                // 缓动函数
+                function easeInOutCubic(t) {
+                    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+                }
+                
+                requestAnimationFrame(animate);
+            }
+            
+            // 去除HTML标签
+            stripHtml(html) {
+                const temp = document.createElement('div');
+                temp.innerHTML = html;
+                return temp.textContent || temp.innerText || '';
+            }
+        }
+
+        // 主应用类
+        class App {
+            constructor() {
+                // 初始化画布
+                window.infiniteCanvas = new InfiniteCanvas();
+                
+                // 初始化侧边栏
+                window.sidebar = new Sidebar();
+                
+                // 阻止浏览器默认的拖拽行为
+                document.addEventListener('dragstart', (e) => {
+                    if (e.target.closest('.card')) {
+                        e.preventDefault();
+                    }
+                });
+                
+                // 阻止浏览器默认的右键菜单
+                document.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                });
+                
+                // 阻止浏览器默认的文本选择
+                document.addEventListener('selectstart', (e) => {
+                    if (!e.target.closest('.card-content')) {
+                        e.preventDefault();
+                    }
+                });
+                
+                // 添加Ctrl+S保存功能
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 's') {
+                        e.preventDefault(); // 阻止浏览器默认的保存行为
+                        saveData();
+                        showStatus('数据已保存');
+                    }
+                });
+                
+                // 加载保存的数据
+                loadData();
+            }
+        }
+
+        // 保存数据到localStorage
+        function saveData() {
+            if (!window.infiniteCanvas) return;
+            
+            const data = window.infiniteCanvas.getData();
+            localStorage.setItem('webpaper-data', JSON.stringify(data));
+        }
+
+        // 从localStorage加载数据
+        function loadData() {
+            try {
+                const savedData = localStorage.getItem('webpaper-data');
+                if (savedData) {
+                    const data = JSON.parse(savedData);
+                    window.infiniteCanvas.loadFromData(data);
+                }
+            } catch (error) {
+                console.error('加载数据失败:', error);
+            }
+        }
+
+        // 显示状态信息
+        function showStatus(message, duration = 2000) {
+            const statusBar = document.getElementById('status-bar');
+            statusBar.textContent = message;
+            statusBar.classList.add('visible');
+            
+            setTimeout(() => {
+                statusBar.classList.remove('visible');
+            }, duration);
+        }
+
+        // 当DOM加载完成后初始化应用
+        document.addEventListener('DOMContentLoaded', () => {
+            new App();
+        });
+    </script>
+</body>
+</html>
