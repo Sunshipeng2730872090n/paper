@@ -124,6 +124,7 @@
 
         .card-delete {
             padding-left: 5px;
+            padding-right: 5px;
             cursor: pointer;
             color: #ff4d4f;
             font-weight: bold;
@@ -212,7 +213,7 @@
     <script>
         // 卡片类
         class Card {
-            constructor(x, y, id = null, width = 160, height = 100, content = '') {
+            constructor(x, y, id = null, width = 160, height = 100, content = '', backgroundColor = 'white', borderColor = '#570d0d') {
                 this.id = id || 'card_' + Date.now();
                 this.x = x;
                 this.y = y;
@@ -222,6 +223,8 @@
                 this.isResizing = false;
                 this.dragOffset = { x: 0, y: 0 };
                 this.content = content;
+                this.backgroundColor = backgroundColor;
+                this.borderColor = borderColor;
                 
                 this.createElement();
                 this.initEventListeners();
@@ -236,6 +239,8 @@
                 this.element.style.top = `${this.y}px`;
                 this.element.style.width = `${this.width}px`;
                 this.element.style.height = `${this.height}px`;
+                this.element.style.backgroundColor = this.backgroundColor;
+                this.element.style.borderColor = this.borderColor;
                 
                 // 创建卡片头部
                 const header = document.createElement('div');
@@ -249,8 +254,16 @@
                 deleteBtn.className = 'card-delete';
                 deleteBtn.textContent = '×';
                 
+                // 添加绿色风格按钮
+                const greenStyleBtn = document.createElement('div');
+                greenStyleBtn.className = 'card-delete'; // 使用相同的样式类
+                greenStyleBtn.textContent = '♦'; // 使用不同的符号
+                greenStyleBtn.style.color = '#4CAF50'; // 绿色
+                greenStyleBtn.title = '切换绿色风格';
+                
                 header.appendChild(title);
                 header.appendChild(deleteBtn);
+                header.appendChild(greenStyleBtn); // 添加绿色风格按钮
                 
                 // 创建卡片内容区
                 const content = document.createElement('div');
@@ -276,6 +289,7 @@
                 const header = this.element.querySelector('.card-header');
                 const resizeHandle = this.element.querySelector('.card-resize');
                 const deleteBtn = this.element.querySelector('.card-delete');
+                const greenStyleBtn = this.element.querySelectorAll('.card-delete')[1]; // 获取绿色风格按钮
                 const content = this.element.querySelector('.card-content');
                 
                 // 拖拽卡片
@@ -318,6 +332,28 @@
                         const canvas = window.infiniteCanvas;
                         canvas.removeCard(this.id);
                     }
+                });
+                
+                // 绿色风格按钮点击事件
+                greenStyleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    // 切换卡片风格
+                    if (this.backgroundColor === '#e9f7e9') {
+                        // 恢复默认风格
+                        this.backgroundColor = 'white';
+                        this.borderColor = '#570d0d';
+                    } else {
+                        // 设置绿色风格
+                        this.backgroundColor = '#e9f7e9';
+                        this.borderColor = '#4CAF50';
+                    }
+                    
+                    // 应用样式
+                    this.element.style.backgroundColor = this.backgroundColor;
+                    this.element.style.borderColor = this.borderColor;
+                    
+                    saveData(); // 保存数据
                 });
                 
                 // 内容更改事件
@@ -404,7 +440,9 @@
                     y: this.y,
                     width: this.width,
                     height: this.height,
-                    content: this.content
+                    content: this.content,
+                    backgroundColor: this.backgroundColor,
+                    borderColor: this.borderColor
                 };
             }
         }
@@ -534,7 +572,9 @@
                         cardData.id,
                         cardData.width,
                         cardData.height,
-                        cardData.content
+                        cardData.content,
+                        cardData.backgroundColor || 'white',
+                        cardData.borderColor || '#570d0d'
                     );
                 } else {
                     card = new Card(x, y);
