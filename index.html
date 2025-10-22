@@ -184,6 +184,66 @@
         #status-bar.visible {
             opacity: 1;
         }
+
+
+        /* 夜间模式样式 */
+        body.night-mode {
+            background-color: #222;
+        }
+
+        .night-mode #infinite-canvas {
+            background-color: #333;
+        }
+
+        .night-mode .card {
+            background-color: #444;
+            color: #666;
+            border-color: #666;
+        }
+
+        .night-mode .card-content {
+            background-color: #444;
+            color: #eee;
+            border-color: #666;
+        }
+
+        .night-mode .card-header {
+            background-color: #555;
+        }
+
+        .night-mode #sidebar {
+            background-color: #333;
+            border-left-color: #444;
+        }
+
+        .night-mode #search-input {
+            background-color: #444;
+            color: #eee;
+            border-color: #666;
+        }
+
+        .night-mode #search-results {
+            background-color: #444;
+            border-color: #666;
+        }
+
+        .night-mode .search-result-item {
+            color: #eee;
+            border-bottom-color: #555;
+        }
+
+        .night-mode .search-result-item:hover {
+            background-color: #555;
+        }
+
+        .night-mode .card-content {
+            color: #eee;
+        }
+
+        .night-mode .card-resize::before {
+            border-color: #999;
+        }
+
     </style>
 </head>
 <body>
@@ -362,6 +422,13 @@
                     saveData(); // 保存数据
                 });
                 
+                content.addEventListener('keydown', (e) => {
+                    if (e.key === 'Tab') {
+                        e.preventDefault();
+                        document.execCommand('insertText', false, '\t');
+                    }
+                });
+
                 // 鼠标移动事件 - 处理拖拽和调整大小
                 document.addEventListener('mousemove', (e) => {
                     if (this.isDragging) {
@@ -844,7 +911,15 @@
                         showStatus('数据已保存');
                     }
                 });
-                
+                // 添加Ctrl+D切换夜间模式
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'd') {
+                        e.preventDefault();
+                        document.body.classList.toggle('night-mode');
+                        saveData();
+                        showStatus(document.body.classList.contains('night-mode') ? '夜间模式已开启' : '夜间模式已关闭');
+                    }
+                });
                 // 加载保存的数据
                 loadData();
             }
