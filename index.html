@@ -134,11 +134,6 @@
             padding: 10px;
             flex: 1;
             overflow: auto;
-            /* 禁用拼写检查和语法检查 */
-            spellcheck: false;
-            -webkit-user-modify: read-write-plaintext-only;
-            -moz-user-modify: read-write-plaintext-only;
-            user-modify: read-write-plaintext-only;
         }
 
         .card-resize {
@@ -334,6 +329,7 @@
                 const content = document.createElement('div');
                 content.className = 'card-content';
                 content.contentEditable = true;
+                content.spellcheck = false; // 禁用拼写检查
                 content.dataset.placeholder = '在这里输入内容...';
                 content.innerHTML = this.content;
                 
